@@ -39,14 +39,20 @@ fi
 chmod 750 "$install_dir"
 chmod -R o-rwx "$install_dir"
 chown -R $app:www-data "$install_dir"
+setfacl -dR -m g:"www-data":rX -m u:$app:rwX "$install_dir/mediaroot/"
+setfacl -R -m g:"www-data":rX -m u:$app:rwX "$install_dir/mediaroot/"
 
 #=================================================
-# NGINX CONFIGURATION
+# REAPPLY SYSTEM CONFIGURATIONS
 #=================================================
-ynh_script_progression --message="Upgrading NGINX web server configuration..." --weight=1
+ynh_script_progression --message="Upgrading system configurations related to $app..." --weight=1
 
-# Create a dedicated NGINX config
 ynh_add_nginx_config
+
+ynh_add_systemd_config
+yunohost service add $app --description="Pytition uWSGI app $app" --log="/var/log/$app/$app.log"
+
+ynh_use_logrotate --non-append
 
 #=================================================
 # SPECIFIC UPGRADE
@@ -85,7 +91,7 @@ chown $app:$app "$install_dir/uwsgi.yaml"
 #=================================================
 ynh_script_progression --message="Running app configuration..." --weight=1
 
-ynh_exec_as $app bash -c "
+ynh_exec_as "$app" bash -c "
     set +o nounset
     source '$install_dir/venv/bin/activate'
     set -o nounset
@@ -96,39 +102,15 @@ ynh_exec_as $app bash -c "
     python3 manage.py compilemessages
 "
 
+chmod 750 "$install_dir/static"
 chown -R $app:www-data "$install_dir/static"
-
-#=================================================
-# SETUP SYSTEMD
-#=================================================
-ynh_script_progression --message="Upgrading systemd configuration..." --weight=1
-
-# Create a dedicated systemd config
-ynh_add_systemd_config
-
-#=================================================
-# GENERIC FINALIZATION
-#=================================================
-# SETUP LOGROTATE
-#=================================================
-ynh_script_progression --message="Upgrading logrotate configuration..." --weight=1
-
-# Use logrotate to manage app-specific logfile(s)
-ynh_use_logrotate --non-append
-
-#=================================================
-# INTEGRATE SERVICE IN YUNOHOST
-#=================================================
-ynh_script_progression --message="Integrating service in YunoHost..." --weight=1
-
-yunohost service add $app --description="Pytition uWSGI app $app" --log="/var/log/$app/$app.log"
 
 #=================================================
 # START SYSTEMD SERVICE
 #=================================================
 ynh_script_progression --message="Starting a systemd service..." --weight=1
 
-ynh_systemd_action --service_name=$app --action="start" --log_path="/var/log/$app/$app.log"
+ynh_systemd_action --service_name="$app" --action="start" --log_path="/var/log/$app/$app.log"
 
 #=================================================
 # END OF SCRIPT
